@@ -118,6 +118,7 @@ class LdapSync extends Command
         } catch (\Exception $e) {
             if ($this->option('json_summary')) {
                 $json_summary = ['error' => true, 'error_message' => $e->getMessage(), 'summary' => []];
+                Log::warning(json_encode($json_summary));
                 $this->info(json_encode($json_summary));
             }
             Log::info($e);
@@ -232,6 +233,11 @@ class LdapSync extends Command
                 $item['department'] = $results[$i][$ldap_result_dept][0] ?? '';
                 $item['manager'] = $results[$i][$ldap_result_manager][0] ?? '';
                 $item['location'] = $results[$i][$ldap_result_location][0] ?? '';
+                $item['website'] = $results[$i]['wwwhomepage'][0] ?? '';
+                $item['address'] = $results[$i]['streetaddress'][0] ?? '';
+                $item['city'] = $results[$i]['l'][0] ?? '';
+                $item['state'] = $results[$i]['st'][0] ?? '';
+                $item['zip'] = $results[$i]['postalcode'][0] ?? '';
 
                 // ONLY if you are using the "ldap_location" option *AND* you have an actual result
                 if ($ldap_result_location && $item['location']) {
@@ -285,6 +291,21 @@ class LdapSync extends Command
             }
             if($ldap_result_location != null){
                 $user->location_id = $location ? $location->id : null;
+            }
+            if(isset($item['website'])){
+                $user->website=$item['website'];
+            }
+            if(isset($item['address'])){
+                $user->address=$item['address'];
+            }
+            if(isset($item['city'])){
+                $user->city=$item['city'];
+            }
+            if(isset($item['state'])){
+                $user->state=$item['state'];
+            }
+            if(isset($item['zip'])){
+                $user->zip=$item['zip'];
             }
 
             if($ldap_result_manager != null){
@@ -414,6 +435,7 @@ class LdapSync extends Command
         }
 
         if ($this->option('summary')) {
+            Log::warning(json_encode($summary));
             for ($x = 0; $x < count($summary); $x++) {
                 if ($summary[$x]['status'] == 'error') {
                     $this->error('ERROR: '.$summary[$x]['firstname'].' '.$summary[$x]['lastname'].' (username:  '.$summary[$x]['username'].') was not imported: '.$summary[$x]['note']);
@@ -423,6 +445,7 @@ class LdapSync extends Command
             }
         } elseif ($this->option('json_summary')) {
             $json_summary = ['error' => false, 'error_message' => '', 'summary' => $summary]; // hardcoding the error to false and the error_message to blank seems a bit weird
+            Log::warning(json_encode($json_summary));
             $this->info(json_encode($json_summary));
         } else {
             return $summary;
