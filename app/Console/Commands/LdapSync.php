@@ -46,10 +46,11 @@ class LdapSync extends Command
     {
 
         // If LDAP enabled isn't set to 1 (ldap_enabled!=1) then we should cut this short immediately without going any further
-        if (Setting::getSettings()->ldap_enabled!='1') {
-            $this->error('LDAP is not enabled. Aborting. See Settings > LDAP to enable it.');
-            exit();
-        }
+        // Commented because I have to sync users from active directory but login through db instead of active directory
+        // if (Setting::getSettings()->ldap_enabled!='1') {
+        //     $this->error('LDAP is not enabled. Aborting. See Settings > LDAP to enable it.');
+        //     exit();
+        // }
 
         ini_set('max_execution_time', env('LDAP_TIME_LIM', 600)); //600 seconds = 10 minutes
         ini_set('memory_limit', env('LDAP_MEM_LIM', '500M'));
@@ -256,7 +257,7 @@ class LdapSync extends Command
                 } else {
                     // Creating a new user.
                     $user = new User;
-                    $user->password = $user->noPassword();
+                    $user->password = $user->ldapSyncUserPassword();
                     $user->activated = 1; // newly created users can log in by default, unless AD's UAC is in use, or an active flag is set (below)
                     $item['createorupdate'] = 'created';
                 }

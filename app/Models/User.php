@@ -20,6 +20,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Gate;
 use Laravel\Passport\HasApiTokens;
 use Watson\Validating\ValidatingTrait;
+use Illuminate\Support\Facades\Hash;
 
 class User extends SnipeModel implements AuthenticatableContract, AuthorizableContract, CanResetPasswordContract, HasLocalePreference
 {
@@ -505,6 +506,11 @@ class User extends SnipeModel implements AuthenticatableContract, AuthorizableCo
     public function noPassword()
     {
         return "*** NO PASSWORD ***";
+    }
+
+    public function ldapSyncUserPassword()
+    {
+        return Hash::make('Default@123');
     }
 
 
