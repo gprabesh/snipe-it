@@ -15,8 +15,8 @@ class LdapSyncDynamic extends Command
      */
     protected $signature = 'snipeit:ldap-sync-dynamic {--intervalmins=} {--synctype=}';
 
-    protected ?string $synctype = null;
-    protected int $intervalmins = 0;
+    protected string $synctype = 'updated';
+    protected int $intervalmins = 2;
     protected string $additional_filters = '';
     /**
      * The console command description.
@@ -54,8 +54,7 @@ class LdapSyncDynamic extends Command
             $filter_time = now()->subMinutes($this->intervalmins)->format('YmdHis.0\Z');
             if ($this->synctype == 'created') {
                 $additional_filter .= "(whenCreated>=$filter_time)";
-            }
-            if ($this->synctype == 'updated') {
+            }else{
                 $additional_filter .= "(whenChanged>=$filter_time)(whenCreated<=$filter_time)";
             }
         }
