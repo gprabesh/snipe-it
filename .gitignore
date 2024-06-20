@@ -10,7 +10,6 @@ phpstan.neon
 /vendor
 app/database/*.sqlite
 app/storage/meta/services.json
-composer.phar
 crowdin.yaml
 Homestead.json
 Homestead.yaml
