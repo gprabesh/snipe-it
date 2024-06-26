@@ -2,10 +2,12 @@
 
 namespace App\Console;
 
+use App\Models\Setting;
+use Illuminate\Support\Facades\Artisan;
 use App\Console\Commands\ImportLocations;
-use App\Console\Commands\ReEncodeCustomFieldNames;
-use App\Console\Commands\RestoreDeletedUsers;
 use Illuminate\Console\Scheduling\Schedule;
+use App\Console\Commands\RestoreDeletedUsers;
+use App\Console\Commands\ReEncodeCustomFieldNames;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 
 class Kernel extends ConsoleKernel
@@ -18,14 +20,12 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        $schedule->command('snipeit:inventory-alerts')->daily();
-        $schedule->command('snipeit:expiring-alerts')->daily();
-        $schedule->command('snipeit:expected-checkin')->daily();
-        $schedule->command('snipeit:backup')->weekly();
-        $schedule->command('backup:clean')->daily();
-        $schedule->command('snipeit:upcoming-audits')->daily();
-        $schedule->command('auth:clear-resets')->everyFifteenMinutes();
-        $schedule->command('saml:clear_expired_nonces')->weekly();
+        $schedule->call(function () {
+            $this->syncUpdatedUsers();
+        })->name('Sync Updated Users')->everyMinute()->withoutOverlapping();
+        $schedule->call(function () {
+            $this->syncCreatedUsers();
+        })->name('Sync Created Users')->everyMinute()->withoutOverlapping();
     }
 
     /**
@@ -34,7 +34,44 @@ class Kernel extends ConsoleKernel
      */
     protected function commands()
     {
-        require base_path('routes/console.php');
-        $this->load(__DIR__.'/Commands');
+        // require base_path('routes/console.php');
+        $this->load(__DIR__ . '/Commands');
+    }
+
+    public function syncCreatedUsers()
+    {
+        $synctype = 'created';
+        $intervalmins = 1;
+
+        $ldap_filter_settings = Setting::getSettings()->ldap_filter;
+        $additional_filter = "";
+        if ($intervalmins > 0) {
+            $filter_time = now()->subMinutes($intervalmins)->format('YmdHis.0\Z');
+            if ($synctype == 'created') {
+                $additional_filter .= "(whenCreated>=$filter_time)";
+            } else {
+                $additional_filter .= "(whenChanged>=$filter_time)(whenCreated<=$filter_time)";
+            }
+        }
+        $final_filter = $ldap_filter_settings . $additional_filter;
+        Artisan::call('snipeit:ldap-sync-new', ['--filter' => $final_filter, '--json_summary' => true, '--synctype' => $synctype]);
+    }
+    public function syncUpdatedUsers()
+    {
+        $synctype = 'updated';
+        $intervalmins = 1;
+
+        $ldap_filter_settings = Setting::getSettings()->ldap_filter;
+        $additional_filter = "";
+        if ($intervalmins > 0) {
+            $filter_time = now()->subMinutes($intervalmins)->format('YmdHis.0\Z');
+            if ($synctype == 'created') {
+                $additional_filter .= "(whenCreated>=$filter_time)";
+            } else {
+                $additional_filter .= "(whenChanged>=$filter_time)(whenCreated<=$filter_time)";
+            }
+        }
+        $final_filter = $ldap_filter_settings . $additional_filter;
+        Artisan::call('snipeit:ldap-sync-new', ['--filter' => $final_filter, '--json_summary' => true, '--synctype' => $synctype]);
     }
 }

@@ -2,9 +2,9 @@
 
 namespace App\Console\Commands;
 
-use Artisan;
 use App\Models\Setting;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Artisan;
 
 class LdapSyncDynamic extends Command
 {
@@ -16,7 +16,7 @@ class LdapSyncDynamic extends Command
     protected $signature = 'snipeit:ldap-sync-dynamic {--intervalmins=} {--synctype=}';
 
     protected string $synctype = 'updated';
-    protected int $intervalmins = 2;
+    protected int $intervalmins = 1;
     protected string $additional_filters = '';
     /**
      * The console command description.
@@ -54,11 +54,11 @@ class LdapSyncDynamic extends Command
             $filter_time = now()->subMinutes($this->intervalmins)->format('YmdHis.0\Z');
             if ($this->synctype == 'created') {
                 $additional_filter .= "(whenCreated>=$filter_time)";
-            }else{
+            } else {
                 $additional_filter .= "(whenChanged>=$filter_time)(whenCreated<=$filter_time)";
             }
         }
         $final_filter = $ldap_filter_settings . $additional_filter;
-        Artisan::call('snipeit:ldap-sync', ['--filter' => $final_filter, '--json_summary' => true]);
+        Artisan::call('snipeit:ldap-sync-new', ['--filter' => $final_filter, '--json_summary' => true, '--synctype' => $this->synctype]);
     }
 }
