@@ -92,6 +92,8 @@ class LdapSyncNew extends Command
                 $ldapconn = Ldap::connectToLdap();
                 Ldap::bindAdminToLdap($ldapconn);
                 $this->existing_users = json_decode($this->scimHttpClient->get('Users', ['query' => ['startIndex' => 0, 'count' => 2000]])->getBody());
+                Log::error('Existing users from snipeit');
+                Log::error(json_encode($this->existing_users));
             } catch (\Exception $e) {
                 if ($this->option('json_summary')) {
                     $json_summary = ['error' => true, 'error_message' => $e->getMessage(), 'summary' => []];
@@ -243,8 +245,8 @@ class LdapSyncNew extends Command
                 $item['jobtitle'] = $results[$i][$ldap_result_jobtitle][0] ?? '';
                 $item['country'] = $results[$i][$ldap_result_country][0] ?? '';
                 $item['department'] = $results[$i][$ldap_result_dept][0] ?? '';
-                $item['manager'] = $results[$i][$ldap_result_manager][0] ?? '';
-                $item['location'] = $results[$i][$ldap_result_location][0] ?? '';
+                // $item['manager'] = $results[$i][$ldap_result_manager][0] ?? '';
+                // $item['location'] = $results[$i][$ldap_result_location][0] ?? '';
                 $item['website'] = $results[$i]['wwwhomepage'][0] ?? '';
                 $item['address'] = $results[$i]['streetaddress'][0] ?? '';
                 $item['city'] = $results[$i]['l'][0] ?? '';
