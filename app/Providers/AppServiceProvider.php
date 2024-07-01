@@ -20,6 +20,7 @@ use App\Observers\SettingObserver;
 use Illuminate\Routing\UrlGenerator;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
+use Microsoft\Kiota\Authentication\Oauth\ClientCredentialContext;
 
 /**
  * This service provider handles setting the observers on models
@@ -79,7 +80,9 @@ class AppServiceProvider extends ServiceProvider
         if (($this->app->environment('production')) && (config('logging.channels.rollbar.access_token'))) {
             $this->app->register(\Rollbar\Laravel\RollbarServiceProvider::class);
         }
-
+        $this->app->bind(ClientCredentialContext::class,function(){
+            return new ClientCredentialContext(config('azure.tenantId'),config('azure.clientId'),config('azure.clientSecret'));
+        });
         $this->app->singleton('ArieTimmerman\Laravel\SCIMServer\SCIMConfig', SnipeSCIMConfig::class); // this overrides the default SCIM configuration with our own
     
     }
