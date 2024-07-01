@@ -108,8 +108,8 @@ class LdapSyncNew extends Command
                 foreach ($this->existing_users->Resources as $key => $value) {
                     $obj = new stdClass;
                     $obj->id = $value->id;
-                    $obj->username = $value->{'urn:ietf:params:scim:schemas:core:2.0:User'}->userName;
-                    $obj->email = $value->{'urn:ietf:params:scim:schemas:core:2.0:User'}->emails[0]->value;
+                    $obj->username = $value->userName;
+                    $obj->email = $value->emails[0]->value;
                     $this->mapped_users->push($obj);
                 }
             }
