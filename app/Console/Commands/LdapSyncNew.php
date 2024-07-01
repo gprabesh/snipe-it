@@ -99,7 +99,7 @@ class LdapSyncNew extends Command
                     $json_summary = ['error' => true, 'error_message' => $e->getMessage(), 'summary' => []];
                     $this->info(json_encode($json_summary));
                 }
-                Log::info($e);
+                Log::error($e);
 
                 return [];
             }
