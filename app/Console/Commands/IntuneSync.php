@@ -2,16 +2,15 @@
 
 namespace App\Console\Commands;
 
+use stdClass;
+use Carbon\Carbon;
 use GuzzleHttp\Client;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
+use App\Exceptions\CustomException;
 use Illuminate\Support\Facades\Log;
-
 use Microsoft\Graph\GraphServiceClient;
-use Microsoft\Graph\Generated\Models\ManagedDevice;
 use Microsoft\Kiota\Authentication\Oauth\ClientCredentialContext;
-use Microsoft\Graph\Generated\Devices\DevicesRequestBuilderGetRequestConfiguration;
-use stdClass;
 
 class IntuneSync extends Command
 {
@@ -20,14 +19,13 @@ class IntuneSync extends Command
      *
      * @var string
      */
-    protected $signature = 'intune:sync {--synctype}';
+    protected $signature = 'intune:sync';
 
     protected ClientCredentialContext $tokenRequestContext;
     protected GraphServiceClient $graphServiceClient;
     protected array $scopes;
     protected array $devices;
-    protected $apiHttpClient, $existing_devices, $mapped_devices,$existingModels,$mappedModels;
-    protected $synctype = 'updated';
+    protected $apiHttpClient, $existing_devices, $mapped_devices, $existingModels, $existingCategories, $existingStatusLabels, $defaultStatusId, $defaultAssetStatus, $defaultModelCategoryType;
 
     /**
      * The console command description.
@@ -47,6 +45,8 @@ class IntuneSync extends Command
         $this->tokenRequestContext = $tokenRequestContext;
         $this->scopes = ['https://graph.microsoft.com/.default'];
         $this->graphServiceClient = new GraphServiceClient($this->tokenRequestContext, $this->scopes);
+        $this->defaultAssetStatus = "deployable";
+        $this->defaultModelCategoryType = "Asset";
     }
 
     /**
@@ -56,11 +56,8 @@ class IntuneSync extends Command
      */
     public function handle()
     {
-        Log::warning("<============================= Start Intune Sync ========================================>");
+        Log::channel('intune')->warning("<============================= Start Intune Sync ========================================>");
 
-        if ($this->option('synctype')) {
-            $this->synctype = $this->option('synctype');
-        }
         $this->apiHttpClient = new Client([
             'headers' => [
                 'Authorization' => 'Bearer ' . config('scim.access_token'),
@@ -69,91 +66,114 @@ class IntuneSync extends Command
             'base_uri' => config('scim.api_base_url'),
         ]);
         ini_set("memory_limit", "1G");
+        $this->graphServiceClient->deviceManagement()->managedDevices()->get()->then(function ($data) {
+            $this->devices = $data->getValue();
+        });
         try {
             $this->existing_devices = json_decode($this->apiHttpClient->get('hardware', ['query' => ['startIndex' => 0, 'count' => 2000]])->getBody());
+            $this->existingModels = json_decode($this->apiHttpClient->get('models', ['query' => ['startIndex' => 0, 'count' => 2000]])->getBody());
+            $this->existingCategories = json_decode($this->apiHttpClient->get('categories', ['query' => ['startIndex' => 0, 'count' => 2000]])->getBody());
+            $this->existingStatusLabels = json_decode($this->apiHttpClient->get('statuslabels', ['query' => ['startIndex' => 0, 'count' => 2000]])->getBody());
         } catch (\Throwable $th) {
-            Log::error($th);
+            Log::channel('intune')->error($th);
             return;
         }
-        dd($this->existing_devices);
-        dd('there');
         $this->mapped_devices = new Collection();
-        if (isset($existing_devices) && count($this->existing_devices) > 0) {
-            foreach ($this->existing_devices as $key => $value) {
+        if (isset($this->existing_devices) && count($this->existing_devices->rows) > 0) {
+            foreach ($this->existing_devices->rows as $key => $value) {
                 $obj = new stdClass();
                 $obj->id = $value->id;
                 $obj->serial = $value->serial;
                 $this->mapped_devices->push($obj);
             }
         }
-        $deviceRequestConfiguration = new DevicesRequestBuilderGetRequestConfiguration();
-        $queryParameters = DevicesRequestBuilderGetRequestConfiguration::createQueryParameters();
-        $queryParameters->select = ["odataType", "id", "deletedDateTime", "accountEnabled", "approximateLastSignInDateTime", "complianceExpirationDateTime", "deviceCategory", "deviceId", "deviceMetadata", "deviceOwnership", "deviceVersion", "displayName", "enrollmentProfileName", "enrollmentType", "isCompliant", "isManaged", "isRooted", "managementType", "manufacturer", "mdmAppId", "model", "onPremisesLastSyncDateTime", "onPremisesSyncEnabled", "operatingSystem", "operatingSystemVersion", "physicalIds", "profileType", "registrationDateTime", "systemLabels", "trustType", "hardwareInformation"];
-        $deviceRequestConfiguration->queryParameters = $queryParameters;
-        $this->graphServiceClient->deviceManagement()->managedDevices()->get()->then(function ($data) {
-            // dd($data);
-            $this->devices =  $this->getDeviceModelsFromPromise($data);
-            // dd($this->devices);
+        $existingStatusLabelsCollection = collect($this->existingStatusLabels->rows);
+        $statusLabelExists = $existingStatusLabelsCollection->search(function ($value, $key) {
+            return $value->type == $this->defaultAssetStatus;
         });
-        // dd($this->devices);
+        $this->defaultStatusId = $existingStatusLabelsCollection->get($statusLabelExists)->id;
         foreach ($this->devices as $key => $value) {
             $deviceResouce = $value->getBackingStore();
-            dd($deviceResouce);
-            Log::error(json_encode($deviceResouce->get("serialNumber")));
-            $deviceSerialIndex = $deviceResouce->get("serialNumber");
-            if (is_array($deviceSerialIndex)) {
-                # code...
-            }
-            // Log::error($deviceSerialIndex);
-            if ($deviceSerialIndex === null) {
-                continue; //skip the device which does not have serial
-            }
-            $serialNo = $deviceResouce->get("serialNumber")[1];
-            if ($deviceResouce->get("displayName") == "DESKTOP-UVVTRQN") {
-                dd($value);
-            }
-            // Log::error($serialNo);
-            if ($serialNo == "PW09MNY8") {
-                dd($value);
-            }
-            $device_exists = $this->mapped_devices->search(function ($value, $key) use ($deviceResouce) {
-                return $value->serial == $deviceResouce->get("serialNumber")[1];
-            });
 
-            if ($device_exists === false && $this->synctype == 'created') {
-            } elseif ($device_exists !== false) {
+            $transformedDevice = $this->transformDevice($deviceResouce);
+            if (!($transformedDevice->enrolledDate->between(now()->subMinutes(2), now())) || strpos($transformedDevice->serial, "VMware-") !== false) {
+                continue;
+            }
+
+            $deviceExists = $this->assertDeviceExists($transformedDevice);
+            try {
+                if ($deviceExists === false) {
+                    $modelCollection = collect($this->existingModels->rows);
+                    $modelExists = $this->assertModelExists($transformedDevice, $modelCollection);
+                    if ($modelExists === false) {
+                        $modelId = $this->createModel($transformedDevice->modelName);
+                    } else {
+                        $modelId = $modelCollection->get($modelExists)->id;
+                    }
+                    $transformedDevice->model_id = $modelId;
+                    unset($transformedDevice->modelName);
+                    $response = $this->apiHttpClient->post('hardware', [
+                        'form_params' => (array)$transformedDevice
+                    ]);
+                    Log::channel('intune')->error($response->getBody());
+                    Log::channel('intune')->error("created");
+                } elseif ($deviceExists >= 0) {
+                    // $response = $this->apiHttpClient->request("PATCH", "hardware/" . $this->mapped_devices->get($deviceExists)->id, [
+                    //     'form_params' => ['notes' => $transformedDevice->notes]
+                    // ]);
+                    // Log::channel('intune')->error($response->getBody());
+                    // Log::channel('intune')->error("updated");
+                }
+            } catch (\Throwable $th) {
+                Log::channel('intune')->error($th);
             }
         }
-    }
-
-    public function getDeviceModelsFromPromise($data)
-    {
-        return $data->getValue();
+        Log::channel('intune')->warning("<============================= End Intune Sync ========================================>");
     }
     public function transformDevice($deviceResource)
     {
         $obj = new stdClass;
-        $obj->name = $deviceResource->get("deviceName")[1];
-        $obj->serial = $deviceResource->get("serialNumber")[1];
-        $obj->notes = $deviceResource->get("notes")[1] ?? "";
-        $obj->name = $deviceResource->get();
-        $obj->name = $deviceResource->get();
-        $obj->name = $deviceResource->get();
-        $obj->name = $deviceResource->get();
-        $obj->name = $deviceResource->get();
-        $obj->name = $deviceResource->get();
-        $obj->name = $deviceResource->get();
-        $obj->name = $deviceResource->get();
-        $obj->name = $deviceResource->get();
-        $obj->name = $deviceResource->get();
-        $obj->name = $deviceResource->get();
-        $obj->name = $deviceResource->get();
-        $obj->name = $deviceResource->get();
-        $obj->name = $deviceResource->get();
-        $obj->name = $deviceResource->get();
-        $obj->name = $deviceResource->get();
-        $obj->name = $deviceResource->get();
-        $obj->name = $deviceResource->get();
-        $obj->name = $deviceResource->get();
+        $obj->name = $deviceResource->get("deviceName");
+        $obj->serial = $deviceResource->get("serialNumber");
+        $obj->notes = $deviceResource->get("notes") ?? "";
+        $obj->asset_tag = $obj->name;
+        $obj->status_id = $this->defaultStatusId;
+        $obj->modelName = $deviceResource->get("model") ?? "";
+        $obj->enrolledDate = Carbon::parse($deviceResource->get("enrolledDateTime"));
+        return $obj;
+    }
+    public function assertDeviceExists($transformedDevice)
+    {
+        return $this->mapped_devices->search(function ($value, $key) use ($transformedDevice) {
+            return $value->serial == $transformedDevice->serial;
+        });
+    }
+    public function assertModelExists($transformedDevice, $modelCollection)
+    {
+        return $modelCollection->search(function ($value, $key) use ($transformedDevice) {
+            return $value->name == $transformedDevice->modelName;
+        });
+    }
+
+    public function createModel($model)
+    {
+        $existingCategoriesCollection = collect($this->existingCategories->rows);
+        $categoryExists = $existingCategoriesCollection->search(function ($value, $key) {
+            return $value->category_type == $this->defaultModelCategoryType;
+        });
+        if ($categoryExists === false) {
+            throw new CustomException("Model Category not found");
+        }
+        $response = $this->apiHttpClient->post('models', [
+            'form_params' => ['name' => $model, 'category_id' => $existingCategoriesCollection->get($categoryExists)->id]
+        ]);
+        if ($response_body = json_decode($response->getBody())) {
+            Log::channel('intune')->error($response->getBody());
+            if ($response_body->status == "success") {
+                array_push($this->existingModels->rows, $response_body->payload);
+                return $response_body->payload->id;
+            }
+        }
+        throw new CustomException("Failed to create model for $model");
     }
 }
