@@ -143,7 +143,7 @@ class IntuneSync extends Command
                             $this->checkinDevice($mapped_device->id);
                             continue;
                         }
-                        if ($mapped_device->assigned_to != null && !empty($transformedDevice->userPrincipalName)) {
+                        if ($mapped_device->assigned_to != null && !empty($transformedDevice->userPrincipalName) && ($mapped_device->assigned_to->email !== $transformedDevice->userPrincipalName)) {
                             $this->checkinDevice($mapped_device->id);
                             $this->deployDevice($mapped_device->id, $transformedDevice->userPrincipalName);
                         }
