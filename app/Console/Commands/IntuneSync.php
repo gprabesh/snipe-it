@@ -99,8 +99,11 @@ class IntuneSync extends Command
 
                 $transformedDevice = $this->transformDevice($deviceResouce);
 
+                if (strpos($transformedDevice->serial, "VMware-") !== false) {
+                    continue;
+                }
                 if (!($transformedDevice->lastSyncDateTime->between(now()->subMinutes(2), now()))) {
-                    if (!($transformedDevice->enrolledDate->between(now()->subMinutes(2), now())) || strpos($transformedDevice->serial, "VMware-") !== false) {
+                    if (!($transformedDevice->enrolledDate->between(now()->subMinutes(2), now()))) {
                         continue;
                     }
                 }
