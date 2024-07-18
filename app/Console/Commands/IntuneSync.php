@@ -147,7 +147,6 @@ class IntuneSync extends Command
                             $this->checkinDevice($mapped_device->id);
                             $this->deployDevice($mapped_device->id, $transformedDevice->userPrincipalName);
                         }
-                        $this->deployDevice($this->mapped_devices->get($deviceExists)->id, $transformedDevice->userPrincipalName);
                     }
                 } catch (CustomException $ce) {
                     Log::channel('intune')->error($ce->getMessage());
