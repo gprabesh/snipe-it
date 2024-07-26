@@ -102,11 +102,11 @@ class IntuneSync extends Command
                 if (strpos($transformedDevice->serial, "VMware-") !== false) {
                     continue;
                 }
-                if (!($transformedDevice->lastSyncDateTime->between(now()->subMinutes(2), now()))) {
-                    if (!($transformedDevice->enrolledDate->between(now()->subMinutes(2), now()))) {
-                        continue;
-                    }
-                }
+                // if (!($transformedDevice->lastSyncDateTime->between(now()->subMinutes(2), now()))) {
+                //     if (!($transformedDevice->enrolledDate->between(now()->subMinutes(2), now()))) {
+                //         continue;
+                //     }
+                // }
                 $deviceExists = $this->assertDeviceExists($transformedDevice);
                 try {
                     if ($deviceExists === false) {
@@ -132,7 +132,18 @@ class IntuneSync extends Command
                             throw new CustomException("Failed to create device $transformedDevice->serial . Something went wrong");
                         }
                         if (!empty($transformedDevice->userPrincipalName)) {
-                            $this->deployDevice($responseObj->payload->id, $transformedDevice->userPrincipalName);
+                            try {
+                                $userId = $this->assertUserExists($transformedDevice->userPrincipalName);
+                            } catch (CustomException $ce) {
+                                Log::channel('intune')->error($ce->getMessage());
+                                $userId = null;
+                            } catch (\Throwable $th) {
+                                Log::error($th);
+                                $userId = null;
+                            }
+                            if ($userId > 0) {
+                                $this->deployDevice($responseObj->payload->id, $userId);
+                            }
                         }
                     } elseif ($deviceExists >= 0) {
                         $mapped_device = $this->mapped_devices->get($deviceExists);
@@ -143,9 +154,35 @@ class IntuneSync extends Command
                             $this->checkinDevice($mapped_device->id);
                             continue;
                         }
+                        if ($mapped_device->assigned_to == null && !empty($transformedDevice->userPrincipalName)) {
+                            try {
+                                $userId = $this->assertUserExists($transformedDevice->userPrincipalName);
+                            } catch (CustomException $ce) {
+                                Log::channel('intune')->error($ce->getMessage());
+                                $userId = null;
+                            } catch (\Throwable $th) {
+                                Log::error($th);
+                                $userId = null;
+                            }
+                            if ($userId > 0) {
+                                $this->deployDevice($mapped_device->id, $userId);
+                            }
+                            continue;
+                        }
                         if ($mapped_device->assigned_to != null && !empty($transformedDevice->userPrincipalName) && ($mapped_device->assigned_to->email !== $transformedDevice->userPrincipalName)) {
-                            $this->checkinDevice($mapped_device->id);
-                            $this->deployDevice($mapped_device->id, $transformedDevice->userPrincipalName);
+                            try {
+                                $userId = $this->assertUserExists($transformedDevice->userPrincipalName);
+                            } catch (CustomException $ce) {
+                                Log::channel('intune')->error($ce->getMessage());
+                                $userId = null;
+                            } catch (\Throwable $th) {
+                                Log::error($th);
+                                $userId = null;
+                            }
+                            if ($userId > 0) {
+                                $this->checkinDevice($mapped_device->id);
+                                $this->deployDevice($mapped_device->id, $userId);
+                            }
                         }
                     }
                 } catch (CustomException $ce) {
@@ -186,6 +223,20 @@ class IntuneSync extends Command
         });
     }
 
+    public function assertUserExists($email)
+    {
+        $getUserResponse = $this->apiHttpClient->get("users", ['query' => ['startIndex' => 0, 'count' => 2000, 'email' => $email]]);
+        if ($getUserResponse->getStatusCode() != 200) {
+            throw new CustomException("Failed to get user with email $email. Something went wrong");
+        }
+        $decodedGetUserResponse = json_decode($getUserResponse->getBody());
+        if ($decodedGetUserResponse->total == 0) {
+            throw new CustomException("Failed to get user $email. User does not exist");
+        }
+        $userId = collect($decodedGetUserResponse->rows)->first()->id;
+        return $userId;
+    }
+
     public function createModel($model)
     {
         $existingCategoriesCollection = collect($this->existingCategories->rows);
@@ -216,18 +267,10 @@ class IntuneSync extends Command
             Log::channel('intune')->error($response->getBody());
             throw new CustomException("Failed to checkin device with id $deviceId");
         }
+        Log::channel('intune')->error($response->getBody());
     }
-    public function deployDevice($deviceId, $userEmail)
+    public function deployDevice($deviceId, $userId)
     {
-        $getUserResponse = $this->apiHttpClient->get("users", ['query' => ['startIndex' => 0, 'count' => 2000, 'email' => $userEmail]]);
-        if ($getUserResponse->getStatusCode() != 200) {
-            throw new CustomException("Failed to get user with email $userEmail. Something went wrong");
-        }
-        $decodedGetUserResponse = json_decode($getUserResponse->getBody());
-        if ($decodedGetUserResponse->total == 0) {
-            throw new CustomException("Failed to get user $userEmail. User does not exist");
-        }
-        $userId = collect($decodedGetUserResponse->rows)->first()->id;
         $response = $this->apiHttpClient->post("hardware/$deviceId/checkout", ['form_params' => [
             'status_id' => $this->defaultStatusId, 'checkout_to_type' => 'user', 'assigned_user' => $userId
         ]]);
@@ -240,5 +283,6 @@ class IntuneSync extends Command
             Log::channel('intune')->error($response->getBody());
             throw new CustomException("Failed to checkout device with id $deviceId");
         }
+        Log::channel('intune')->error($response->getBody());
     }
 }

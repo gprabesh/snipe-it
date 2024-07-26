@@ -28,7 +28,7 @@ class Kernel extends ConsoleKernel
         })->name('Sync Created Users')->everyMinute()->withoutOverlapping();
         // $schedule->call(function () {
         //     Artisan::call('intune:sync');
-        // })->name('Intune Sync')->everyMinute()->withoutOverlapping();
+        // })->name('Intune Sync')->everyFifteenMinutes()->withoutOverlapping();
     }
 
     /**
