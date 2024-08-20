@@ -169,7 +169,7 @@ class IntuneSync extends Command
                             }
                             continue;
                         }
-                        if ($mapped_device->assigned_to != null && !empty($transformedDevice->userPrincipalName) && ($mapped_device->assigned_to->email !== $transformedDevice->userPrincipalName)) {
+                        if ($mapped_device->assigned_to != null && !empty($transformedDevice->userPrincipalName) && (strtolower($mapped_device->assigned_to->email) !== strtolower($transformedDevice->userPrincipalName))) {
                             try {
                                 $userId = $this->assertUserExists($transformedDevice->userPrincipalName);
                             } catch (CustomException $ce) {
