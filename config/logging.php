@@ -52,16 +52,21 @@ $config = [
         'daily' => [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),
-            'level' => env('LOG_LEVEL', 'warning'),
+            'level' => env('LOG_LEVEL', 'info'),
             'days' => env('LOG_MAX_DAYS', 14),
         ],
         'intune' => [
             'driver' => 'daily',
             'path' => storage_path('logs/intune.log'),
-            'level' => env('LOG_LEVEL', 'warning'),
+            'level' => env('LOG_LEVEL', 'info'),
             'days' => env('LOG_MAX_DAYS', 14),
         ],
-
+        'entra' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/entra.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'days' => env('LOG_MAX_DAYS', 14),
+        ],
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),
