@@ -21,17 +21,9 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule)
     {
         // $schedule->call(function () {
-        //     $this->syncUpdatedUsers();
-        // })->name('Sync Updated Users')->everyMinute()->withoutOverlapping();
-        // $schedule->call(function () {
-        //     $this->syncCreatedUsers();
-        // })->name('Sync Created Users')->everyMinute()->withoutOverlapping();
-        // $schedule->call(function () {
-        //     $this->syncEntraCreatedUsers();
-        // })->name('Entra-Sync-Created-Users')->everyTwoMinutes()->withoutOverlapping();
-        // $schedule->call(function () {
-        //     $this->syncEntraUpdatedUsers();
-        // })->name('Entra-Sync-Updated-Users')->everyTwoMinutes()->withoutOverlapping();
+        //     Artisan::call('entra:sync', ['--apply' => 'true']);
+        // })->name('Entra-Sync')->everyFiveMinutes()->withoutOverlapping();
+
         $schedule->call(function () {
             Artisan::call('intune:sync');
         })->name('Intune Sync')->everyFifteenMinutes()->withoutOverlapping();
@@ -82,18 +74,5 @@ class Kernel extends ConsoleKernel
         }
         $final_filter = $ldap_filter_settings . $additional_filter;
         Artisan::call('snipeit:ldap-sync-new', ['--filter' => $final_filter, '--json_summary' => true, '--synctype' => $synctype]);
-    }
-
-    public function syncEntraCreatedUsers()
-    {
-        $synctype = 'created';
-        $intervalmins = 2;
-        Artisan::call('entra:sync', ['--intervalmins' => $intervalmins, '--synctype' => $synctype, '--apply' => 'true']);
-    }
-    public function syncEntraUpdatedUsers()
-    {
-        $synctype = 'updated';
-        $intervalmins = 2;
-        Artisan::call('entra:sync', ['--intervalmins' => $intervalmins, '--synctype' => $synctype, '--apply' => 'true']);
     }
 }

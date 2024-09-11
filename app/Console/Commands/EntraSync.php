@@ -18,7 +18,7 @@ class EntraSync extends Command
      *
      * @var string
      */
-    protected $signature = 'entra:sync {--intervalmins=} {--synctype=} {--apply=}';
+    protected $signature = 'entra:sync {--apply=}';
 
     /**
      * The console command description.
@@ -31,13 +31,13 @@ class EntraSync extends Command
     protected $existing_users;
     protected $mapped_users;
     protected $entra_users;
-    protected $synctype = 'created';
+    // protected $synctype = 'created';
     protected $filter = "userType eq 'Member'";
-    protected int $intervalmins = 1;
+    // protected int $intervalmins = 1;
     protected ClientCredentialContext $tokenRequestContext;
     protected GraphServiceClient $graphServiceClient;
     protected array $scopes;
-    protected $filter_time;
+    // protected $filter_time;
     protected $apply = 'false';
 
     /**
@@ -62,21 +62,21 @@ class EntraSync extends Command
     {
         Log::channel('entra')->info("<============================= Start Entra Sync ========================================>");
 
-        if ($this->option('intervalmins')) {
-            $this->intervalmins = $this->option('intervalmins');
-        }
-        if ($this->option('synctype')) {
-            $this->synctype = $this->option('synctype');
-        }
+        // if ($this->option('intervalmins')) {
+        //     $this->intervalmins = $this->option('intervalmins');
+        // }
+        // if ($this->option('synctype')) {
+        //     $this->synctype = $this->option('synctype');
+        // }
         if ($this->option('apply')) {
             $this->apply =  $this->option('apply');
         }
-        $this->filter_time = now()->subMinutes($this->intervalmins)->toIso8601String();
-        if ($this->synctype == 'created') {
-            $this->filter .= " and createdDateTime ge $this->filter_time";
-        } else {
-            $this->filter .= " and onPremisesLastSyncDateTime ge $this->filter_time and createdDateTime le $this->filter_time";
-        }
+        // $this->filter_time = now()->subMinutes($this->intervalmins)->toIso8601String();
+        // if ($this->synctype == 'created') {
+        //     $this->filter .= " and createdDateTime ge $this->filter_time";
+        // } else {
+        //     $this->filter .= " and onPremisesLastSyncDateTime ge $this->filter_time and createdDateTime le $this->filter_time";
+        // }
         $this->apiHttpClient = new Client([
             'headers' => [
                 'Authorization' => 'Bearer ' . config('scim.access_token'),
@@ -141,7 +141,7 @@ class EntraSync extends Command
                 $invalidDataUsers += 1;
                 continue;
             }
-            if ($user_exists === false && $this->synctype == 'created' && $this->apply == 'true') {
+            if ($user_exists === false && $this->apply == 'true') {
                 $response = $this->apiHttpClient->post('users', [
                     'form_params' => (array)$transformedUser
                 ]);
@@ -216,7 +216,7 @@ class EntraSync extends Command
         $obj->first_name = $userResource->get("givenName");
         $obj->last_name = $userResource->get("surname");
         $obj->username = $userResource->get("onPremisesSamAccountName");
-        $obj->password = ucfirst($obj->username) . "@123#";
+        $obj->password = ucfirst($obj->username) . strtolower($obj->last_name) . "@123#";
         $obj->password_confirmation = $obj->password;
         $obj->email = $userResource->get("userPrincipalName");
         $obj->phone = $userResource->get("mobilePhone");
