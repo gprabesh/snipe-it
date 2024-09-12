@@ -141,7 +141,7 @@ class EntraSync extends Command
                 $invalidDataUsers += 1;
                 continue;
             }
-            if ($user_exists === false && $this->apply == 'true') {
+            if ($user_exists === false && $transformedUser->activated == true && $this->apply == 'true') {
                 $response = $this->apiHttpClient->post('users', [
                     'form_params' => (array)$transformedUser
                 ]);
