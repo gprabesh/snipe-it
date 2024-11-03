@@ -137,7 +137,7 @@ class EntraSync extends Command
                 return strtolower($value->username) == strtolower($transformedUser->username) && strtolower($value->email) == strtolower($transformedUser->email);
             });
             $isValidUser = $this->validateUser($transformedUser);
-            if (!$isValidUser) {
+            if (!$isValidUser && $transformedUser->activated == true) {
                 $invalidDataUsers += 1;
                 continue;
             }
@@ -154,6 +154,7 @@ class EntraSync extends Command
                         Log::channel('entra')->error('Failed to create user with data: ' . json_encode($transformedUser));
                     }
                 } else {
+                    $failedToCreateUsers += 1;
                     Log::channel('entra')->error('Something went wrong while creating user with data: ' . json_encode($transformedUser));
                 }
             } elseif ($user_exists !== false) {
