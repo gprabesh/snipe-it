@@ -25,7 +25,7 @@ class IntuneSync extends Command
     protected GraphServiceClient $graphServiceClient;
     protected array $scopes;
     protected array $devices;
-    protected $apiHttpClient, $existing_devices, $mapped_devices, $existingModels, $existingCategories, $existingStatusLabels, $defaultStatusId, $defaultAssetStatus, $defaultModelCategoryType;
+    protected $apiHttpClient, $existing_devices, $mapped_devices, $transformed_mapped_intune_devices, $existingModels, $existingCategories, $existingStatusLabels, $defaultStatusId, $defaultAssetStatus, $defaultModelCategoryType;
 
     /**
      * The console command description.
@@ -96,17 +96,16 @@ class IntuneSync extends Command
             $this->defaultStatusId = $existingStatusLabelsCollection->get($statusLabelExists)->id;
             foreach ($this->devices as $key => $value) {
                 $deviceResouce = $value->getBackingStore();
-
                 $transformedDevice = $this->transformDevice($deviceResouce);
-
-                if (strpos($transformedDevice->serial, "VMware-") !== false || $transformedDevice->serial=="0" || $transformedDevice->serial=="5B9MNH2") {
+                if (strpos($transformedDevice->serial, "VMware-") !== false || $transformedDevice->serial == "0" || $transformedDevice->serial == "5B9MNH2") {
                     continue;
                 }
-                // if (!($transformedDevice->lastSyncDateTime->between(now()->subMinutes(2), now()))) {
-                //     if (!($transformedDevice->enrolledDate->between(now()->subMinutes(2), now()))) {
-                //         continue;
-                //     }
-                // }
+                if (!isset($this->transformed_mapped_intune_devices[$transformedDevice->serial]) || Carbon::parse($transformedDevice->enrolledDate) > Carbon::parse($this->transformed_mapped_intune_devices[$transformedDevice->serial]->enrolledDate)) {
+                    $this->transformed_mapped_intune_devices[$transformedDevice->serial] = $transformedDevice;
+                }
+            }
+            foreach ($this->transformed_mapped_intune_devices as $key => $value) {
+                $transformedDevice = $value;
                 $deviceExists = $this->assertDeviceExists($transformedDevice);
                 try {
                     if ($deviceExists === false) {
@@ -272,7 +271,9 @@ class IntuneSync extends Command
     public function deployDevice($deviceId, $userId)
     {
         $response = $this->apiHttpClient->post("hardware/$deviceId/checkout", ['form_params' => [
-            'status_id' => $this->defaultStatusId, 'checkout_to_type' => 'user', 'assigned_user' => $userId
+            'status_id' => $this->defaultStatusId,
+            'checkout_to_type' => 'user',
+            'assigned_user' => $userId
         ]]);
         if ($response->getStatusCode() != 200) {
             throw new CustomException("Failed to checkout device with id $deviceId . Something went wrong");
