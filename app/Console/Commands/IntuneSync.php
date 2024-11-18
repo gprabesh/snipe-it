@@ -84,6 +84,7 @@ class IntuneSync extends Command
                 foreach ($this->existing_devices->rows as $key => $value) {
                     $obj = new stdClass();
                     $obj->id = $value->id;
+                    $obj->name = $value->name;
                     $obj->serial = $value->serial;
                     $obj->assigned_to = $value->assigned_to;
                     $this->mapped_devices->push($obj);
@@ -137,7 +138,7 @@ class IntuneSync extends Command
                                 Log::channel('intune')->error($ce->getMessage());
                                 $userId = null;
                             } catch (\Throwable $th) {
-                                Log::error($th);
+                                Log::channel('intune')->error($th);
                                 $userId = null;
                             }
                             if ($userId > 0) {
@@ -146,6 +147,16 @@ class IntuneSync extends Command
                         }
                     } elseif ($deviceExists >= 0) {
                         $mapped_device = $this->mapped_devices->get($deviceExists);
+                        $deviceRequiresUpdate = $this->assertDeviceInfoUpdated($mapped_device, $transformedDevice);
+                        if ($deviceRequiresUpdate) {
+                            try {
+                                $this->updateDeviceName($mapped_device->id, $transformedDevice);
+                            } catch (CustomException $ce) {
+                                Log::channel('intune')->error($ce->getMessage());
+                            } catch (\Throwable $th) {
+                                Log::channel('intune')->error($th);
+                            }
+                        }
                         if ($mapped_device->assigned_to == null && empty($transformedDevice->userPrincipalName)) {
                             continue;
                         }
@@ -160,7 +171,7 @@ class IntuneSync extends Command
                                 Log::channel('intune')->error($ce->getMessage());
                                 $userId = null;
                             } catch (\Throwable $th) {
-                                Log::error($th);
+                                Log::channel('intune')->error($th);
                                 $userId = null;
                             }
                             if ($userId > 0) {
@@ -175,7 +186,7 @@ class IntuneSync extends Command
                                 Log::channel('intune')->error($ce->getMessage());
                                 $userId = null;
                             } catch (\Throwable $th) {
-                                Log::error($th);
+                                Log::channel('intune')->error($th);
                                 $userId = null;
                             }
                             if ($userId > 0) {
@@ -283,6 +294,33 @@ class IntuneSync extends Command
         if (isset($decoded) && $decoded->status != "success") {
             Log::channel('intune')->error($response->getBody());
             throw new CustomException("Failed to checkout device with id $deviceId");
+        }
+        Log::channel('intune')->error($response->getBody());
+    }
+
+    public function assertDeviceInfoUpdated($snipeItDevice, $intuneDevice)
+    {
+        $needsUpdate = false;
+        if ($snipeItDevice->name != $intuneDevice->name) {
+            $needsUpdate = true;
+        }
+        return $needsUpdate;
+    }
+
+    public function updateDeviceName($deviceId, $intuneDevice)
+    {
+        $response = $this->apiHttpClient->patch("hardware/$deviceId", ['form_params' => [
+            'name' => $intuneDevice->name,
+            'asset_tag' => $intuneDevice->asset_tag
+        ]]);
+        if ($response->getStatusCode() != 200) {
+            throw new CustomException("Failed to update device with id $deviceId . Something went wrong");
+        }
+        $decoded = json_decode($response->getBody());
+
+        if (isset($decoded) && $decoded->status != "success") {
+            Log::channel('intune')->error($response->getBody());
+            throw new CustomException("Failed to update device with id $deviceId");
         }
         Log::channel('intune')->error($response->getBody());
     }
